@@ -1,3 +1,5 @@
+[Gitee](https://gitee.com/haujet/audio-video-synchronization)　|　[Github](https://github.com/HaujetZhao/audio-video-synchronization) 
+
 ### 用途
 
 功能： 通过波形比较，得到两个音频的时间戳偏移值，合成新视频。 
