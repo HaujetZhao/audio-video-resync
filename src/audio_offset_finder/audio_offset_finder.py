@@ -1,0 +1,279 @@
+# audio-offset-finder
+#
+# Copyright (c) 2014 British Broadcasting Corporation
+# Copyright (c) 2018 Abram Hindle
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# 内存分析：
+# @profile
+# python -m memory_profiler example.py
+
+from subprocess import Popen, PIPE
+from scipy.io import wavfile
+# from scikits.talkbox.features.mfcc import mfcc
+import matplotlib.pyplot as plt
+import librosa
+import os, tempfile, warnings, math, shlex
+import numpy as np
+from icecream import ic
+
+def mfcc(音频文件, nwin=256, n_fft=512, 音频采样率=16000, n_mfcc=20):
+    return [np.transpose(librosa.feature.mfcc(y=音频文件, sr=音频采样率, n_fft=n_fft, win_length=nwin, n_mfcc=n_mfcc))]
+
+def add_feature(mfcc1, 音频平方均根):
+    tmfcc1 = np.zeros((mfcc1.shape[0], mfcc1.shape[1] + 音频平方均根.shape[0]))
+    n = mfcc1.shape[0]
+    m = mfcc1.shape[1]
+    w = 音频平方均根.shape[0]
+    tmfcc1[0:n,0:m] = mfcc1[0:n,0:m]
+    tmfcc1[0:n,m:m+w]   = np.transpose(音频平方均根[0:w, 0:n])
+    return tmfcc1
+
+def get_audio(file1, 音频采样率=16000, trim=60 * 15):
+    '''
+    Haujet Zhao：这里涉及到了音频处理领域的专业名词，具体是怎么分析音频片段相似度的我也看不懂，只能将部分难懂的名词尽可能翻译成中文。
+
+    :param file1:
+    :param 音频采样率:
+    :param trim:
+    :return: 重采样后的临时音频文件、mfcc1、无零的音频数据、平方均根列表
+    '''
+    临时音频文件 = file1
+    # Removing warnings because of 18 bits block size
+    # outputted by ffmpeg
+    # https://trac.ffmpeg.org/ticket/1843
+    # warnings.simplefilter("ignore", wavfile.WavFileWarning)
+    warnings.simplefilter("ignore")
+    a1 = wavfile.read(临时音频文件, mmap=True)[1] / (2.0 ** 15)
+    # We truncate zeroes off the beginning of each signals
+    # (only seems to happen in ffmpeg, not in sox)
+    a1 = ensure_non_zero(a1)
+    # print(f"{file1} 采样数: {a1.shape[0]}")
+
+    # Mel频率倒谱系数 Mel-frequency cepstral coefficients (MFCCs)
+    Mel频率倒谱系数 = mfcc(a1, nwin=256, n_fft=512, 音频采样率=音频采样率, n_mfcc=26)[0]
+    Mel频率倒谱系数 = std_mfcc(Mel频率倒谱系数)
+
+    # 得到每一帧的平方均根 root-mean-square (RMS)
+    平方均根列表 = librosa.feature.rms(a1)
+
+    # 光谱矩心 spectral centroid
+    光谱矩心 = librosa.feature.spectral_centroid(y=a1, sr=音频采样率)
+
+    # 偏移频率 roll-off frequency
+    偏移频率 = librosa.feature.spectral_rolloff(y=a1, sr=音频采样率, roll_percent=0.1)
+
+    # Constant-Q chromagram
+    chroma_cq1 = librosa.feature.chroma_cqt(y=a1, sr=音频采样率, n_chroma=12)
+
+    # 光谱通量起始强度包络线 spectral flux onset strength envelope
+    起始包络线 = librosa.onset.onset_strength(y=a1, sr=音频采样率, n_mels=int(音频采样率 / 800))
+
+    # 主要局部脉冲（PLP）估计 Predominant local pulse (PLP) estimation
+    脉冲 = librosa.beat.plp(onset_envelope=起始包络线, sr=音频采样率)
+    Mel频率倒谱系数 = add_feature(Mel频率倒谱系数, 平方均根列表)
+    Mel频率倒谱系数 = add_feature(Mel频率倒谱系数, 偏移频率 / 音频采样率)
+    Mel频率倒谱系数 = add_feature(Mel频率倒谱系数, 光谱矩心 / 音频采样率)
+    Mel频率倒谱系数 = add_feature(Mel频率倒谱系数, chroma_cq1)
+    Mel频率倒谱系数 = add_feature(Mel频率倒谱系数, 起始包络线.reshape(1,起始包络线.shape[0]))
+    Mel频率倒谱系数 = add_feature(Mel频率倒谱系数, 脉冲.reshape(1,起始包络线.shape[0]))
+
+    return 临时音频文件, Mel频率倒谱系数, a1, 平方均根列表
+
+def find_offset(要在其中查找的音频, 视频, 母音频偏移秒数, 单位片段秒数, 音频采样率=16000, correl_nframes=1000, plotit=False):
+
+    子音频前移时长 = 0
+
+    # 子音频在母音频中找偏移值
+    母音频 = convert_and_trim(要在其中查找的音频, 音频采样率, trim=None, offset=母音频偏移秒数)
+    子音频 = convert_and_trim(视频, 音频采样率, 单位片段秒数, offset=子音频前移时长)
+
+    子音频数据 = wavfile.read(子音频, mmap=True)[1]
+    子音频数据长度 = len(子音频数据)
+    del 子音频数据
+    if (子音频数据长度 / 音频采样率) > 5:
+        子音频前移时长 = min((子音频数据长度 / 音频采样率), 120) - min((子音频数据长度 / 音频采样率) - 5, 15)
+        ic(子音频前移时长)
+        子音频 = convert_and_trim(视频, 音频采样率, 单位片段秒数, offset=子音频前移时长)
+
+    母音频数据 = wavfile.read(母音频, mmap=True)[1]
+    母音频数据长度 = len(母音频数据)
+    ic(母音频数据长度)
+
+    单位片段数据长度 = 单位片段秒数 * 音频采样率
+    总音频段数 = math.ceil(母音频数据长度 / 单位片段数据长度)
+    ic(单位片段数据长度)
+    ic(总音频段数)
+
+    clip_tmp = tempfile.NamedTemporaryFile(mode='r+b', prefix='offset_clip_', suffix='.wav')
+    clip_tmp_name = clip_tmp.name
+    clip_tmp.close()
+
+    及格分 = 8
+    最高分 = 0
+    总移值 = 母音频偏移秒数
+    新片段向前偏移秒数 = 0
+
+    for i in range(总音频段数):
+        start = i * 单位片段数据长度
+        if i > 0:
+            新片段向前偏移秒数 = 60
+            start -= 新片段向前偏移秒数 * 音频采样率
+        end = min(i * 单位片段数据长度 + 单位片段数据长度, 母音频数据长度 - 1)
+        wavfile.write(clip_tmp_name, 音频采样率, 母音频数据[start:end])
+
+        audio1 = get_audio(clip_tmp_name, 音频采样率, 单位片段秒数)
+        audio2 = get_audio(子音频, 音频采样率, 单位片段秒数)
+
+        offset, score = find_clip_offset(audio1, audio2, 音频采样率, plotit=plotit)
+        ic(score)
+        if score > 最高分:
+            最高分 = score
+            总移值 = i * 单位片段秒数 + 母音频偏移秒数 + offset - 子音频前移时长 - 新片段向前偏移秒数
+        if score > 及格分:
+            break
+
+        # if i == 0:
+        #     # 如果在母音频第一段没有找到子音频的匹配项，则有可能子音频
+        #     # print(f'母音频前 {min(单位片段秒数, 母音频数据长度 / 音频采样率)} 秒没有找到匹配项，尝试子母音频互换角色进行匹配')
+        #     offset, score = find_clip_offset(audio2, audio1, 音频采样率, plotit=plotit)
+        #     ic(score)
+        #     offset = -offset
+        #     if score > 最高分:
+        #         最高分 = score
+        #         总移值 = i * 单位片段秒数 + 母音频偏移秒数 + offset - 新片段向前偏移秒数
+        #     if score > 及格分:
+        #         break
+
+
+    return 总移值, 最高分
+
+def find_clip_offset(audio1, audio2, 音频采样率=16000, correl_nframes=1000, plotit=False):
+    临时音频文件1, mfcc1, 音频数据1, 平方均根1 = audio1
+    临时音频文件2, mfcc2, 音频数据2, 平方均根2 = audio2
+
+    # 得到列表，表示每一帧偏移后，匹配的程度，取最高值为位移帧
+    c = cross_correlation(mfcc1, mfcc2, nframes=correl_nframes)
+    max_k_index = np.argmax(c)
+
+    偏移 = max_k_index * (音频数据1.shape[0]/平方均根1.shape[1]) / float(音频采样率) # * over / sample rate
+    得分 = (c[max_k_index] - np.mean(c)) / max(np.std(c), 1) # standard score of peak
+    # print(f'平均：{c.mean()}，最高：{c.max()}，标准偏差：{c.std()}，得分：{得分}')
+
+    # 平均：1202.300101166129，最高：5043.099973205289，标准偏移：98.9231325776551，得分：38.826104389932404
+    # 平均：6516.720731310761，最高：18995.55737876569，标准偏移：919.0905800829654，得分：13.577374110752476
+    # 平均：1691.5112593519439，最高：4928.635606636239，标准偏差：220.24122696339376，得分：14.698085330873754
+    if plotit:
+        plt.figure(figsize=(8, 4))
+        plt.plot(c)
+        plt.show()
+    return 偏移, 得分
+
+def ensure_non_zero(signal):
+    # We add a little bit of static to avoid
+    # 'divide by zero encountered in log'
+    # during MFCC computation
+    # 添加一点静态值，以避免在 MFCC 计算中的除以非0值错误
+    signal += np.random.random(len(signal)) * 10**-10
+    return signal
+
+def make_similar_shape(mfcc1,mfcc2):
+    n1, mdim1 = mfcc1.shape
+    n2, mdim2 = mfcc2.shape
+    # print((nframes,(n1,mdim1),(n2,mdim2)))
+    if (n2 < n1):
+        t = np.zeros((n1,mdim2))
+        t[0:n2,0:mdim2] = mfcc2[0:n2,0:mdim2]
+        mfcc2 = t
+    elif (n2 > n1):
+        return make_similar_shape(mfcc2,mfcc1)
+    return (mfcc1,mfcc2)
+
+def cross_correlation(mfcc1, mfcc2, nframes):
+    n1, mdim1 = mfcc1.shape
+    n2, mdim2 = mfcc2.shape
+
+    if n1 <= nframes:
+        nframes = min(n1, n2)
+
+    # 如果视频长度不够，就把它补起来
+    if (n2 < nframes):
+        t = np.zeros((nframes,mdim2))
+        t[0:n2,0:mdim2] = mfcc2[0:n2,0:mdim2]
+        mfcc2 = t
+
+    # 向后位移一位，查找的次数
+
+    n = n1 - nframes + 1
+
+    c = np.zeros(n)
+    for k in range(n):
+        cc = np.sum(np.multiply(mfcc1[k:k+nframes], mfcc2[:nframes]), axis=0)
+        c[k] = np.linalg.norm(cc,1)
+    return c
+
+def std_mfcc(mfcc):
+    return (mfcc - np.mean(mfcc, axis=0)) / np.std(mfcc, axis=0)
+
+def convert_and_trim(afile, sr, trim, offset):
+    tmp = tempfile.NamedTemporaryFile(mode='r+b', prefix='offset_', suffix='.wav')
+    tmp_name = tmp.name
+    tmp.close()
+
+    if not trim:
+        command = f'ffmpeg -loglevel panic -i "{afile}" -ac 1 -ar {sr} -ss {offset} -vn -c:a pcm_s16le "{tmp_name}"'
+    else:
+        command = f'ffmpeg -loglevel panic -i "{afile}" -ac 1 -ar {sr} -ss {offset} -t {trim} -vn -c:a pcm_s16le "{tmp_name}"'
+    command = shlex.split(command)
+
+    psox = Popen(command, stderr=PIPE)
+    psox.communicate()
+
+    if not psox.returncode == 0:
+        raise Exception("FFMpeg failed")
+
+    # print(f'tmp_name: {tmp_name}')
+    return tmp_name
+
+class BatchOffsetFinder:
+    def __init__(self, haystack_filenames, fs=8000, trim=60*15, correl_nframes=1000):
+        self.fs = fs
+        self.trim = trim
+        self.correl_nframes = correl_nframes
+        self.haystacks = []
+
+        for filename in haystack_filenames:
+            self.haystacks.append((filename, get_audio(filename, fs, trim)))
+
+    def find_offset(self, needle):
+        best_score = 0
+        best_filename = ""
+        best_offset = 0
+        needle_audio = get_audio(needle, self.fs, self.trim)
+        for (haystack_filename, haystack_audio) in self.haystacks:
+            offset, score = find_clip_offset(haystack_audio, needle_audio, self.fs, self.correl_nframes)
+            if (score > best_score):
+                best_score = score
+                best_filename = haystack_filename
+                best_offset = offset
+
+        print("Cleaning up %s" % str(needle_audio[0]))
+        os.remove(needle_audio[0])
+
+        return best_filename, best_offset, best_score
+
+    def __del__(self):
+        for haystack in self.haystacks:
+            print("Cleaning up %s" % str(haystack[1][0]))
+            os.remove(haystack[1][0])

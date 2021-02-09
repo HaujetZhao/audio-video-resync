@@ -1,0 +1,6 @@
+scipy
+numpy
+icecream
+librosa
+matplotlib
+pyinstaller
