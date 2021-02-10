@@ -4,6 +4,8 @@
 
 功能： 通过波形比较，得到两个音频的时间戳偏移值，合成新视频。 
 
+大白话：将视频中的声音替换成录音笔中的声音，并自动对齐。
+
 用途示例： 录制 vlog时，使用录音笔实现更好的收声，再将相机的视频与录音笔的录音同步。
 
 ### 背景
@@ -20,7 +22,7 @@
 
 如果只是为了将视频中的声音替换成录音笔的声音，我还需要一个轻量的工具。
 
-经过搜索，在 github 上，我找到了 [BBC 的 audio-offset-finder](https://github.com/bbc/audio-offset-finder)，可以分析两段声音之间的偏移时间，但它是用 python2.7 写的，然后我找到了 [abramhindle 的 audio-offset-finder fork](https://github.com/abramhindle/audio-offset-finder) ，他用 python3 进行了重新实现和优化，[benkno 的 audio-offset-finder fork]( https://github.com/benkno/audio-offset-finder) 又做了 bash 处理的优化。
+经过搜索，在 github 上，我找到了 [BBC 的 audio-offset-finder](https://github.com/bbc/audio-offset-finder)，可以分析两段声音之间的偏移时间，但它是用 python2.7 写的，然后我找到了 [abramhindle 教授的](https://github.com/abramhindle) 的 [audio-offset-finder fork](https://github.com/abramhindle/audio-offset-finder) ，他用 python3 进行了重新实现和优化，[benkno 的 audio-offset-finder fork]( https://github.com/benkno/audio-offset-finder) 又做了 bash 处理的优化。
 
 经上述两个 fork 的优化，audio-offset-finder 的大概原理就成了：
 
@@ -50,16 +52,48 @@ pip install -r requirements.txt
 
 ### 使用
 
+为了保证音频对齐的效果，请尽量确保所用的视频和音频时长大于20秒。
+
 例子：
+
+```
+python __init__.py
+```
 
 ```shell
 python __init__.py 录音笔音频.mp3 相机视频1.mp4 相机视频2.mp4 相机视频3.mp4
 ```
 
-用法：
+第一种方式是直接运行，会有文字提示引导你：
 
-```bash
-python __init__.py -h
+```
+> python __init__.py
+正在初始化，请稍等
+
+你没有输入任何音频和视频文件，因此进入文字引导。
+程序的用处主要是将视频中的音频替换为其它录音设备中的音频，例如：
+  * 使用相机录像
+  * 使用录音笔、手机随身录音
+  * 将相机机内麦克风录制的声音，替换成录音笔中的高质量收音
+录音笔录制的时间一般要长于视频片段的长度
+因此，这个过程可以理解为：
+    在音频（查找范围）中查找视频声音（查找目标）的偏移，再将视频中的声音替换
+所以要先指定范围（音频文件），再指定目标（视频文件）
+
+
+首先输入音频文件（查找范围）
+请输入文件路径 或 直接拖入：音频.mp3
+
+再输入视频文件（查找目标）
+请输入文件路径 或 直接拖入：视频.mp4
+
+总共有 1 个视频需要对齐，正在对齐第 1 个：视频.mp4
+```
+
+第二种方式是命令行传递参数运行，可以一次传递 **一个音频** 和 **多个视频** ：
+
+```
+> python __init__.py -h
 usage: __init__.py [-h] [--version] [--offset Minutes]
                    [--trim Minutes] [--sr SampleRate]
                    [--format Format] [--not-generate] [--plotit]

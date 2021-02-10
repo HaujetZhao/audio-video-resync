@@ -19,14 +19,21 @@
 # @profile
 # python -m memory_profiler example.py
 
+import math
+import os
+import shlex
+import tempfile
+import warnings
 from subprocess import Popen, PIPE
-from scipy.io import wavfile
-# from scikits.talkbox.features.mfcc import mfcc
-import matplotlib.pyplot as plt
+
+# `from scikits.talkbox.features.mfcc import mfcc` is used for python2.7
+# we use librosa in python3 to reimplement
 import librosa
-import os, tempfile, warnings, math, shlex
+import matplotlib.pyplot as plt
 import numpy as np
 from icecream import ic
+from scipy.io import wavfile
+
 
 def mfcc(音频文件, nwin=256, n_fft=512, 音频采样率=16000, n_mfcc=20):
     return [np.transpose(librosa.feature.mfcc(y=音频文件, sr=音频采样率, n_fft=n_fft, win_length=nwin, n_mfcc=n_mfcc))]
@@ -93,19 +100,21 @@ def get_audio(file1, 音频采样率=16000, trim=60 * 15):
 
 def find_offset(要在其中查找的音频, 视频, 母音频偏移秒数, 单位片段秒数, 音频采样率=16000, correl_nframes=1000, plotit=False):
 
-    子音频前移时长 = 0
-
     # 子音频在母音频中找偏移值
     母音频 = convert_and_trim(要在其中查找的音频, 音频采样率, trim=None, offset=母音频偏移秒数)
     子音频 = convert_and_trim(视频, 音频采样率, 单位片段秒数, offset=子音频前移时长)
 
     子音频数据 = wavfile.read(子音频, mmap=True)[1]
     子音频数据长度 = len(子音频数据)
+    子音频时长 = 子音频数据长度 / 音频采样率
     del 子音频数据
-    if (子音频数据长度 / 音频采样率) > 5:
-        子音频前移时长 = min((子音频数据长度 / 音频采样率), 120) - min((子音频数据长度 / 音频采样率) - 5, 15)
-        ic(子音频前移时长)
-        子音频 = convert_and_trim(视频, 音频采样率, 单位片段秒数, offset=子音频前移时长)
+
+    # 不能从子音频的第一帧开始取片段进行分析
+    # 因为录制者有可能先按下了录像开关，然后过了几秒钟才按下录音笔开关
+    # 所以要对采样的起始点添加一个偏移
+    子音频前移时长 = min(子音频时长 * 1 / 3, 180)
+    ic(子音频前移时长)
+    子音频 = convert_and_trim(视频, 音频采样率, 单位片段秒数, offset=子音频前移时长)
 
     母音频数据 = wavfile.read(母音频, mmap=True)[1]
     母音频数据长度 = len(母音频数据)
@@ -136,7 +145,7 @@ def find_offset(要在其中查找的音频, 视频, 母音频偏移秒数, 单�
         audio1 = get_audio(clip_tmp_name, 音频采样率, 单位片段秒数)
         audio2 = get_audio(子音频, 音频采样率, 单位片段秒数)
 
-        offset, score = find_clip_offset(audio1, audio2, 音频采样率, plotit=plotit)
+        offset, score, c = find_clip_offset(audio1, audio2, 音频采样率, plotit=plotit)
         ic(score)
         if score > 最高分:
             最高分 = score
@@ -144,18 +153,11 @@ def find_offset(要在其中查找的音频, 视频, 母音频偏移秒数, 单�
         if score > 及格分:
             break
 
-        # if i == 0:
-        #     # 如果在母音频第一段没有找到子音频的匹配项，则有可能子音频
-        #     # print(f'母音频前 {min(单位片段秒数, 母音频数据长度 / 音频采样率)} 秒没有找到匹配项，尝试子母音频互换角色进行匹配')
-        #     offset, score = find_clip_offset(audio2, audio1, 音频采样率, plotit=plotit)
-        #     ic(score)
-        #     offset = -offset
-        #     if score > 最高分:
-        #         最高分 = score
-        #         总移值 = i * 单位片段秒数 + 母音频偏移秒数 + offset - 新片段向前偏移秒数
-        #     if score > 及格分:
-        #         break
-
+    # 显示具体分数的图表
+    if plotit:
+        plt.figure(figsize=(8, 4))
+        plt.plot(c)
+        plt.show()
 
     return 总移值, 最高分
 
@@ -171,14 +173,12 @@ def find_clip_offset(audio1, audio2, 音频采样率=16000, correl_nframes=1000,
     得分 = (c[max_k_index] - np.mean(c)) / max(np.std(c), 1) # standard score of peak
     # print(f'平均：{c.mean()}，最高：{c.max()}，标准偏差：{c.std()}，得分：{得分}')
 
-    # 平均：1202.300101166129，最高：5043.099973205289，标准偏移：98.9231325776551，得分：38.826104389932404
-    # 平均：6516.720731310761，最高：18995.55737876569，标准偏移：919.0905800829654，得分：13.577374110752476
-    # 平均：1691.5112593519439，最高：4928.635606636239，标准偏差：220.24122696339376，得分：14.698085330873754
     if plotit:
         plt.figure(figsize=(8, 4))
         plt.plot(c)
         plt.show()
-    return 偏移, 得分
+
+    return 偏移, 得分, c
 
 def ensure_non_zero(signal):
     # We add a little bit of static to avoid
@@ -189,7 +189,7 @@ def ensure_non_zero(signal):
     return signal
 
 def make_similar_shape(mfcc1,mfcc2):
-    n1, mdim1 = mfcc1.shape
+    n1, mdim1 = mfcc1.shape #
     n2, mdim2 = mfcc2.shape
     # print((nframes,(n1,mdim1),(n2,mdim2)))
     if (n2 < n1):
@@ -201,11 +201,14 @@ def make_similar_shape(mfcc1,mfcc2):
     return (mfcc1,mfcc2)
 
 def cross_correlation(mfcc1, mfcc2, nframes):
-    n1, mdim1 = mfcc1.shape
-    n2, mdim2 = mfcc2.shape
+    n1, mdim1 = mfcc1.shape # 母
+    n2, mdim2 = mfcc2.shape # 子
 
     if n1 <= nframes:
-        nframes = min(n1, n2)
+        if n2 <= nframes:
+            nframes = int(min(n1, n2 / 2))
+        else:
+            nframes = min(n1, n2)
 
     # 如果视频长度不够，就把它补起来
     if (n2 < nframes):
@@ -214,11 +217,12 @@ def cross_correlation(mfcc1, mfcc2, nframes):
         mfcc2 = t
 
     # 向后位移一位，查找的次数
-
     n = n1 - nframes + 1
 
+    # 计算结果的列表
     c = np.zeros(n)
     for k in range(n):
+        # 将两个片段特征值依次相乘，再加和，纯性对数标准化，对齐的那一点，它的值会特别的高
         cc = np.sum(np.multiply(mfcc1[k:k+nframes], mfcc2[:nframes]), axis=0)
         c[k] = np.linalg.norm(cc,1)
     return c
