@@ -18,18 +18,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-print(f'正在初始化，请稍等')
-
 import argparse
 import os
 import shlex
 import subprocess
 import sys
 
-from audio_offset_finder.audio_offset_finder import find_offset
-
-
 def main():
+    不马上退出 = False
     if len(sys.argv) == 1:
         不马上退出 = True
 
@@ -91,6 +87,7 @@ def 得到输入文件():
     return 输入文件
 
 def sync(within, find_offset_of, offset, trim, sr, format, not_generate, plotit):
+    from audio_offset_finder.audio_offset_finder import find_offset
     for file in [within, find_offset_of]:
         if not os.path.exists(file):
             print(f'文件不存在，故跳过：{file}')
