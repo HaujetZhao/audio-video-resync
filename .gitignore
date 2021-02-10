@@ -1,5 +1,6 @@
 *.spec
 __pycache__
+*.pyc
 *.log
 *.spec
 *.mp4
