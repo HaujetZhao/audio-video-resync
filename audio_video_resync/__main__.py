@@ -1,22 +1,12 @@
 #coding=utf-8
 
-# audio-offset-finder
-#
-# Copyright (c) 2014 British Broadcasting Corporation
-# Copyright (c) 2018 Abram Hindle
-# Copyright (c) 2019 Benjamin Knowles
+# Copyright (c) 2021 Haujet Zhao
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 # http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 import argparse
 import os
@@ -87,7 +77,7 @@ def 得到输入文件():
     return 输入文件
 
 def sync(within, find_offset_of, offset, trim, sr, format, not_generate, plotit):
-    from audio_offset_finder.audio_offset_finder import find_offset
+    from .audio_offset_finder import find_offset
     for file in [within, find_offset_of]:
         if not os.path.exists(file):
             print(f'文件不存在，故跳过：{file}')

@@ -2,18 +2,13 @@
 #
 # Copyright (c) 2014 British Broadcasting Corporation
 # Copyright (c) 2018 Abram Hindle
+# Copyright (c) 2021 Haujet Zhao
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 # http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 # 内存分析：
 # @profile
@@ -47,7 +42,7 @@ def add_feature(mfcc1, 音频平方均根):
     tmfcc1[0:n,m:m+w]   = np.transpose(音频平方均根[0:w, 0:n])
     return tmfcc1
 
-def get_audio(file1, 音频采样率=16000, trim=60 * 15):
+def get_audio(file1, 音频采样率=16000):
     '''
     Haujet Zhao：这里涉及到了音频处理领域的专业名词，具体是怎么分析音频片段相似度的我也看不懂，只能将部分难懂的名词尽可能翻译成中文。
 
@@ -142,10 +137,10 @@ def find_offset(要在其中查找的音频, 视频, 母音频偏移秒数, 单�
         end = min(i * 单位片段数据长度 + 单位片段数据长度, 母音频数据长度 - 1)
         wavfile.write(clip_tmp_name, 音频采样率, 母音频数据[start:end])
 
-        audio1 = get_audio(clip_tmp_name, 音频采样率, 单位片段秒数)
-        audio2 = get_audio(子音频, 音频采样率, 单位片段秒数)
+        audio1 = get_audio(clip_tmp_name, 音频采样率)
+        audio2 = get_audio(子音频, 音频采样率)
 
-        offset, score, c = find_clip_offset(audio1, audio2, 音频采样率, plotit=plotit)
+        offset, score, c = find_clip_offset(audio1, audio2, 音频采样率)
         ic(score)
         if score > 最高分:
             最高分 = score
@@ -161,7 +156,7 @@ def find_offset(要在其中查找的音频, 视频, 母音频偏移秒数, 单�
 
     return 总移值, 最高分
 
-def find_clip_offset(audio1, audio2, 音频采样率=16000, correl_nframes=1000, plotit=False):
+def find_clip_offset(audio1, audio2, 音频采样率=16000, correl_nframes=1000):
     临时音频文件1, mfcc1, 音频数据1, 平方均根1 = audio1
     临时音频文件2, mfcc2, 音频数据2, 平方均根2 = audio2
 
@@ -173,10 +168,6 @@ def find_clip_offset(audio1, audio2, 音频采样率=16000, correl_nframes=1000,
     得分 = (c[max_k_index] - np.mean(c)) / max(np.std(c), 1) # standard score of peak
     # print(f'平均：{c.mean()}，最高：{c.max()}，标准偏差：{c.std()}，得分：{得分}')
 
-    if plotit:
-        plt.figure(figsize=(8, 4))
-        plt.plot(c)
-        plt.show()
 
     return 偏移, 得分, c
 
