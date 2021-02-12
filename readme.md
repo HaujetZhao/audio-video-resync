@@ -61,7 +61,7 @@ audio-video-resync 录音笔音频.mp3 相机视频1.mp4 相机视频2.mp4 相�
 
 需要提前安装上 FFmpeg
 
-已为 Windows 64 位打包成可直接双击运行的包，请到 [本仓库的 Releases](./releases) 界面下载。将 7z 压缩包解压后，文件夹内有一个 exe 文件，双击即可运行：
+已为 Windows 64 位打包成可直接双击运行的包，请到 [本仓库的 Releases](../../releases) 界面下载。将 7z 压缩包解压后，文件夹内有一个 exe 文件，双击即可运行：
 
 ![exe文件](assets/exe文件.png) 
 
