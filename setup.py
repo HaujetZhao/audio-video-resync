@@ -21,11 +21,11 @@
 from setuptools import setup
 
 # python setup.py build sdist clean install & audio-video-resync
-# twine upload -u USERNAME -p PASSWORD "dist/audio-video-resync-0.5.0.tar.gz"
+# twine upload -u USERNAME -p PASSWORD "dist/audio-video-resync-1.0.0.tar.gz"
 
 setup(
     name='audio-video-resync',
-    version='0.5.0',
+    version='1.0.0',
     description='通过波形比较，得到两个音频的时间戳偏移值，合成新视频。 ',
     author='Yves Raimond and Abram Hindle and Haujet Zhao',
     author_email='yves.raimond@bbc.co.uk and hindle1@ualberta.ca and haujetzhao@qq.com',
