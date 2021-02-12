@@ -43,6 +43,7 @@ setup(
             'console_scripts': [
                 'audio-video-resync=audio_video_resync.__main__:main',
                 'audio_video_resync=audio_video_resync.__main__:main'
+                'AudioVideoResync=audio_video_resync.__main__:main',
             ]
     },
 
