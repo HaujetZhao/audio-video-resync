@@ -62,7 +62,7 @@ def main():
         sync(args.Audio, video, 前移秒数, 片段秒数, args.sr, args.format, args.not_generate, args.plotit)
 
     if 不马上退出:
-        input('\n所有任务处理完毕，按下回车关闭窗口')
+        input('\n所有任务处理完毕，按下回车结束')
 
 def 得到输入文件():
     while True:
@@ -85,7 +85,7 @@ def sync(within, find_offset_of, offset, trim, sr, format, not_generate, plotit)
 
     offset, score = find_offset(within, find_offset_of, offset, trim, sr, plotit=plotit)
 
-    print(f"偏移: {str(offset)} (秒)")
+    print(f'偏移时长: {"{:.2f}".format(offset)} (秒)')
 
     # ffmpeg 命令
     if offset >= 0:

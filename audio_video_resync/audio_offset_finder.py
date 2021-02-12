@@ -99,7 +99,8 @@ def find_offset(要在其中查找的音频, 视频, 母音频偏移秒数, 单�
     母音频 = convert_and_trim(要在其中查找的音频, 音频采样率, trim=None, offset=母音频偏移秒数)
     母音频数据 = wavfile.read(母音频, mmap=True)[1]
     母音频数据长度 = len(母音频数据)
-    ic(母音频数据长度)
+    print(f'母音频数据长度：{母音频数据长度}')
+    # ic(母音频数据长度)
 
     子音频 = convert_and_trim(视频, 音频采样率, 单位片段秒数, offset=0)
     子音频数据 = wavfile.read(子音频, mmap=True)[1]
@@ -110,15 +111,16 @@ def find_offset(要在其中查找的音频, 视频, 母音频偏移秒数, 单�
     # 因为录制者有可能先按下了录像开关，然后过了几秒钟才按下录音笔开关
     # 所以要对采样的起始点添加一个偏移
     子音频前移时长 = min(子音频时长 * 1 / 3, 180)
-    ic(子音频前移时长)
+    print(f'子音频取样开始点：{"{:.2f}".format(子音频前移时长)}s')
+    # ic(子音频前移时长)
     子音频 = convert_and_trim(视频, 音频采样率, 单位片段秒数, offset=子音频前移时长)
 
 
 
     单位片段数据长度 = 单位片段秒数 * 音频采样率
     总音频段数 = math.ceil(母音频数据长度 / 单位片段数据长度)
-    ic(单位片段数据长度)
-    ic(总音频段数)
+    print(f'单位片段数据长度：{单位片段数据长度}')
+    print(f'母音频分段数：{总音频段数}')
 
     clip_tmp = tempfile.NamedTemporaryFile(mode='r+b', prefix='offset_clip_', suffix='.wav')
     clip_tmp_name = clip_tmp.name
@@ -130,6 +132,8 @@ def find_offset(要在其中查找的音频, 视频, 母音频偏移秒数, 单�
     新片段向前偏移秒数 = 0
 
     for i in range(总音频段数):
+        print(f'匹配及格分：{及格分}')
+        print(f'与母音频第 {i+1} 段比较中……')
         start = i * 单位片段数据长度
         if i > 0:
             新片段向前偏移秒数 = 60
@@ -141,12 +145,15 @@ def find_offset(要在其中查找的音频, 视频, 母音频偏移秒数, 单�
         audio2 = get_audio(子音频, 音频采样率)
 
         offset, score, c = find_clip_offset(audio1, audio2, 音频采样率)
-        ic(score)
+        print(f'母音频第 {i+1} 段匹配得分：{"{:.2f}".format(score)} ')
+        # ic(score)
         if score > 最高分:
             最高分 = score
             总移值 = i * 单位片段秒数 + 母音频偏移秒数 + offset - 子音频前移时长 - 新片段向前偏移秒数
         if score > 及格分:
+            print(f'母音频第 {i + 1} 段匹配得分品优，不再继续分析')
             break
+    print(f'最终匹配得分：{"{:.2f}".format(score)}')
 
     # 显示具体分数的图表
     if plotit:
