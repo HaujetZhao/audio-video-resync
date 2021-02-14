@@ -163,7 +163,7 @@ def find_offset(要在其中查找的音频, 视频, 母音频偏移秒数, 单�
 
     return 总移值, 最高分
 
-def find_clip_offset(audio1, audio2, 音频采样率=16000, correl_nframes=9000):
+def find_clip_offset(audio1, audio2, 音频采样率=16000, correl_nframes=1000):
     临时音频文件1, mfcc1, 音频数据1, 平方均根1 = audio1
     临时音频文件2, mfcc2, 音频数据2, 平方均根2 = audio2
 
@@ -202,11 +202,13 @@ def cross_correlation(mfcc1, mfcc2, nframes):
     n1, mdim1 = mfcc1.shape # 母
     n2, mdim2 = mfcc2.shape # 子
 
+    if n2 <= nframes:
+        nframes = int(n2 * 3 / 4)
+
     if n1 <= nframes:
-        if n2 <= nframes:
-            nframes = int(min(n1, n2 * 3 / 4))
-        else:
-            nframes = min(n1, n2)
+        nframes = n1
+
+    ic(nframes)
 
     # 如果视频长度不够，就把它补起来
     if (n2 < nframes):
