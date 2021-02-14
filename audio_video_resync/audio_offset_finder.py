@@ -110,7 +110,7 @@ def find_offset(要在其中查找的音频, 视频, 母音频偏移秒数, 单�
     # 不能从子音频的第一帧开始取片段进行分析
     # 因为录制者有可能先按下了录像开关，然后过了几秒钟才按下录音笔开关
     # 所以要对采样的起始点添加一个偏移
-    子音频前移时长 = min(子音频时长 * 1 / 3, 180)
+    子音频前移时长 = min(子音频时长 * 1 / 5, 180)
     print(f'子音频取样开始点：{"{:.2f}".format(子音频前移时长)}s')
     # ic(子音频前移时长)
     子音频 = convert_and_trim(视频, 音频采样率, 单位片段秒数, offset=子音频前移时长)
@@ -163,7 +163,7 @@ def find_offset(要在其中查找的音频, 视频, 母音频偏移秒数, 单�
 
     return 总移值, 最高分
 
-def find_clip_offset(audio1, audio2, 音频采样率=16000, correl_nframes=1000):
+def find_clip_offset(audio1, audio2, 音频采样率=16000, correl_nframes=9000):
     临时音频文件1, mfcc1, 音频数据1, 平方均根1 = audio1
     临时音频文件2, mfcc2, 音频数据2, 平方均根2 = audio2
 
@@ -204,7 +204,7 @@ def cross_correlation(mfcc1, mfcc2, nframes):
 
     if n1 <= nframes:
         if n2 <= nframes:
-            nframes = int(min(n1, n2 / 2))
+            nframes = int(min(n1, n2 * 3 / 4))
         else:
             nframes = min(n1, n2)
 
